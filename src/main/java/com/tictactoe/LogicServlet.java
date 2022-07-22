@@ -1,5 +1,6 @@
 package com.tictactoe;
 
+import javax.servlet.RequestDispatcher;
 import javax.servlet.ServletException;
 import javax.servlet.annotation.WebServlet;
 import javax.servlet.http.HttpServlet;
@@ -21,9 +22,49 @@ public class LogicServlet extends HttpServlet {
 
         // Поулчаем индекс ячейки, по которой произошёл клик
         int index = getSelectedIndex(req);
+        Sign currentSign = field.getField().get(index);
+
+        // Проверяем, что ячейка, по которой был клик пустая.
+        // Иначе ничего не делаем и отправляем пользователя на ту же страницу без изменений
+        // параметров в сессии
+        if (currentSign != Sign.EMPTY) {
+            RequestDispatcher dispatcher = getServletContext().getRequestDispatcher("/index.jsp");
+            dispatcher.forward(req, resp);
+            return;
+        }
 
         // Ставим крестик в ячейке, по которой кликнул пользователь
         field.getField().put(index, Sign.CROSS);
+
+        // Проверяем, не победил ли крестик
+        if (checkWin(resp, currentSession, field)) {
+            return;
+        }
+
+        // Получаем первую пустую ячейку поля
+        int emptyFieldIndex = field.getEmptyFieldIndex();
+
+        // Проверяем что есть пустые ячейки, иначе ничья
+        if (emptyFieldIndex >= 0) {
+            field.getField().put(emptyFieldIndex, Sign.NOUGHT);
+            // Проверяем не победил ли нолики
+            if (checkWin(resp, currentSession, field)) {
+                return;
+            }
+        } else {
+            // Добавляем в сессию фдаг, который сигнализирует что произошла ничья
+            currentSession.setAttribute("draw", true);
+
+            // Считываем список значков
+            List<Sign> data = field.getFieldData();
+
+            // Обновляем список значков
+            currentSession.setAttribute("data", data);
+
+            // Редиректим
+            resp.sendRedirect("/index.jsp");
+            return;
+        }
 
         // Считаем список значков
         List<Sign> data = field.getFieldData();
@@ -35,6 +76,7 @@ public class LogicServlet extends HttpServlet {
         resp.sendRedirect("/index.jsp");
     }
 
+    // Получаем атрибут filed из сессии
     private Field extractFiled(HttpSession currentSession) {
         Object fieldAttribute = currentSession.getAttribute("field");
 
@@ -46,10 +88,33 @@ public class LogicServlet extends HttpServlet {
         return (Field)fieldAttribute;
     }
 
+    // Получаем номер ячейки по которой кликнули
     private int getSelectedIndex(HttpServletRequest request) {
         String click = request.getParameter("click");
         boolean isNumeric = click.chars().allMatch(Character::isDigit);
         return isNumeric ? Integer.parseInt(click) : 0;
     }
+
+    // Проверяем нет ли трех крестиков/ноликов в ряд.
+    private boolean checkWin(HttpServletResponse response, HttpSession currentSession, Field field) throws IOException {
+        Sign winner = field.checkWin();
+        if (Sign.CROSS == winner || Sign.NOUGHT == winner) {
+            // Добавляем флаг, который показывает что кто-то победил
+            currentSession.setAttribute("winner", winner);
+
+            // Считываем  список значков
+            List<Sign> data = field.getFieldData();
+            // Обновляем этот список в сессии
+            currentSession.setAttribute("data", data);
+
+            // Редиректим
+            response.sendRedirect("/index.jsp");
+
+            return true;
+        }
+
+        return false;
+    }
+
 
 }
